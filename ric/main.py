@@ -16,7 +16,7 @@ summary_dataset_path = 'openai/summarize_from_feedback'
 @dataclass
 class ScriptArguments:
     log_with: Optional[str] = field(default=None, metadata={"help": "use 'wandb' to log with wandb"})
-    disable_wandb: Optional[str] = field(default=False, metadata={'help': 'Whether to disable wandb or not.'})
+    disable_wandb: Optional[str] = field(default=True, metadata={'help': 'Whether to disable wandb or not.'})
     save_directory: Optional[str] = field(default='./logs_trl/', metadata={'help':'path'})
     learning_rate: Optional[float] = field(default=1e-5, metadata={"help": "the learning rate"})
     batch_size: Optional[int] = field(default=1, metadata={"help": "the batch size"})
@@ -28,7 +28,7 @@ class ScriptArguments:
     max_grad_norm: Optional[float] = field(default=1, metadata={"help": "Maximum gradient norm for gradient clipping"})
     quantile_threshold: Optional[float] = field(default=0.7)
     num_origin_samples: Optional[int] = field(default=10000) 
-    wandb_name: Optional[str] = field(default='ric_assistant_harmlesshelpful_offline20000_lr1e-4', metadata={"help": "Name for this experiment"})
+    wandb_name: Optional[str] = field(default='helpfulharmless', metadata={"help": "Name for this experiment"})
     base_model_name: Optional[str] = field(default='meta-llama/Llama-2-7b-hf', metadata={"help": "local path to the base model or the huggingface id"})
     peft_name: Optional[str] = field(default='', metadata={"help": "local path to the peft model"})
     reward_names:Optional[str] = field(default='harmless,helpful') 
@@ -49,12 +49,12 @@ if script_args.disable_wandb: # if you don't need the wandb log
 
 reward_names = [x.strip() for x in script_args.reward_names.split(',')]
 reward_path_tokenizer_dict = {
-    'harmless': ['Ray2333/gpt2-large-harmless-reward_model'],
-    'helpful': ['Ray2333/gpt2-large-helpful-reward_model'],
+    'harmless': ['/home/futingchen/PLM/gpt2large_harmless_reward'],
+    'helpful': ['/home/futingchen/PLM/gpt2large_helpful_reward'],
     'deberta': ['OpenAssistant/reward-model-deberta-v3-large-v2'],
     'summary': ['Tristan/gpt2_reward_summarization'],
     'faithful':['CogComp/bart-faithful-summary-detector'],
-    'humor': ['mohameddhiab/humor-no-humor'],
+    'humor': ['/home/futingchen/PLM/distilbert_humor_reward'],
 }
 reward_model_path_list = []
 rm_tokenizer_path_list = []
@@ -115,9 +115,9 @@ for i in range(script_args.num_online_iterations):
             tokenizer_name=tokenizer_name,
             rm_tokenizer_path_list=rm_tokenizer_path_list,
             dataset=dataset,
-            save_path=os.path.join(save_path, 'model_iter{}'.format(i)),
-            peft_name=peft_name,
-            reward_stats_path=reward_stats_path,
+            save_path = checkpoint_path,
+            peft_name = peft_name,
+            reward_stats_path = reward_stats_path,
             iter=i,
             args=script_args,
             exp_type=exp_type,
@@ -134,7 +134,7 @@ for i in range(script_args.num_online_iterations):
         peft_name=peft_name,
         reward_model_path_list=reward_model_path_list,
         train_dataset=merged_data,
-        save_path=save_path + '/model_iter{}'.format(i+1),
+        save_path = save_path + '/model_iter{}'.format(i+1),
         tokenizer_name=tokenizer_name,
         rm_tokenizer_path_list=rm_tokenizer_path_list,
         training_steps=script_args.online_training_steps,

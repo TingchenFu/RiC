@@ -589,8 +589,12 @@ def dataset_from_csv_n(checkpoint_path, tokenizer, exp_type='assistant', quantil
         instructions = Instructions_summary_n(num_scores)
 
     def process(sample):
-        sample['prompt'] = instructions.get_input(sample['query'])
-        sample['response'] = instructions.get_response(sample['query'])
+        if 'query' in sample:
+            sample['prompt'] = instructions.get_input(sample['query'])
+            sample['response'] = instructions.get_response(sample['query'])
+        else:
+            sample['response'] = sample['output']   
+
         sample['text'] = sample['prompt'] + ' ' + sample['response']
         sample['prompt_with_score'] = sample['prompt'].rstrip(instructions.response_split) 
         for i in range(num_scores):

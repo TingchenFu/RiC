@@ -15,15 +15,15 @@ from utils import Instructions_n, load_main_tokenizer, Instructions_summary_n
 from multi_reward_models import RewardModels
 
 # define paths for two datasets
-hhrlhf_dataset_path = 'Anthropic/hh-rlhf'
-summary_dataset_path = 'openai/summarize_from_feedback'
-tokenizer_name = 'meta-llama/Llama-2-7b-hf'
+# hhrlhf_dataset_path = 'Anthropic/hh-rlhf'
+# summary_dataset_path = 'openai/summarize_from_feedback'
+tokenizer_name = '/home/futingchen/PLM/Llama-2-7b-hf'
 
 
 @dataclass
 class ScriptArguments:
     reward_names:Optional[str] = field(default='harmless,helpful') 
-    save_directory: Optional[str] = field(default='./datasets/all_full_train_harmhelp.hf')
+    save_directory: Optional[str] = field(default='./data_helpful_harmless')
     exp_type: Optional[str] = field(default='assistant', metadata={"help": "exp type, 'summary' or 'assistant' "})
 
 parser = HfArgumentParser(ScriptArguments)
@@ -31,12 +31,12 @@ script_args = parser.parse_args_into_dataclasses()[0]
 reward_names = [x.strip() for x in script_args.reward_names.split(',')]
 print(reward_names)
 reward_path_tokenizer_dict = {
-    'harmless': ['Ray2333/gpt2-large-harmless-reward_model'],
-    'helpful': ['Ray2333/gpt2-large-helpful-reward_model'],
+    'harmless': ['/home/futingchen/PLM/gpt2large_harmless_reward'],
+    'helpful': ['/home/futingchen/PLM/gpt2large_helpful_reward'],
     'deberta': ['OpenAssistant/reward-model-deberta-v3-large-v2'],
     'summary': ['Tristan/gpt2_reward_summarization'],
     'faithful':['CogComp/bart-faithful-summary-detector'],
-    'humor': ['mohameddhiab/humor-no-humor'],
+    'humor': ['/home/futingchen/PLM/distilbert_humor_reward'],
 }
 reward_model_path_list = []
 rm_tokenizer_path_list = []
@@ -53,7 +53,7 @@ reward_models = RewardModels(reward_model_path_list, rm_tokenizer_path_list, gpu
 rm_tokenizers = reward_models.rm_tokenizers
 
 def build_dataset(index, tokenizer, rm_tokenizers, split='train'):
-    ds = load_dataset(hhrlhf_dataset_path, split=split)
+    ds = load_dataset('json',data_files=['/home/futingchen/MultiContrast/data/HH/harmless_base_train.jsonl', '/home/futingchen/MultiContrast/data/HH/helpful_base_train.jsonl', '/home/futingchen/MultiContrast/data/HH/helpful_online_train.jsonl',  '/home/futingchen/MultiContrast/data/HH/helpful_sampled_train.jsonl' ] , split=split)
     n = len(rm_tokenizers)
 
     # multiprocessing the dataset
@@ -176,10 +176,10 @@ def add_score_assistant(sample):
 n = len(rm_tokenizers)
 if script_args.exp_type == 'assistant':
     instructions = Instructions_n(n)
-    train_data = build_dataset(gpu_id, tokenizer, rm_tokenizers, 'train')
+    #train_data = build_dataset(gpu_id, tokenizer, rm_tokenizers, 'train')
 else:
     instructions = Instructions_summary_n(n)
-    train_data = build_dataset_summary(gpu_id, tokenizer, rm_tokenizers, 'train')
+    #train_data = build_dataset_summary(gpu_id, tokenizer, rm_tokenizers, 'train')
 
 # normalize dataset and save information
 if Accelerator().num_processes == 1:
@@ -199,9 +199,9 @@ if Accelerator().num_processes == 1:
     train_data.set_format(type="torch")
     train_data.save_to_disk(script_args.save_directory)
     print(np.array([mean_reward_lis, std_reward_lis]).reshape(2, -1).T)
-    np.save(script_args.save_directory + '/all_reward_stat.npy', np.array([mean_reward_lis, std_reward_lis]).reshape(2, -1).T)
+    np.save(script_args.save_directory + '/helpful_harmless_stat.npy', np.array([mean_reward_lis, std_reward_lis]).reshape(2, -1).T)
 else:
-    train_data.save_to_disk(script_args.save_directory + '/ind{}'.format(gpu_id))
+    # train_data.save_to_disk(script_args.save_directory + '/ind{}'.format(gpu_id))
     accelerator = Accelerator()
     accelerator.wait_for_everyone()
     if gpu_id == 0:
@@ -222,14 +222,4 @@ else:
         train_data_all.set_format(type="torch")
         train_data_all.save_to_disk(script_args.save_directory)
         print(np.array([mean_reward_lis, std_reward_lis]).reshape(2, -1).T)
-        np.save(script_args.save_directory + '/all_reward_stat.npy', np.array([mean_reward_lis, std_reward_lis]).reshape(2, -1).T)
-
-
-
-
-
-
-
-
-
-
+        np.save(script_args.save_directory + '/reward_stat.npy', np.array([mean_reward_lis, std_reward_lis]).reshape(2, -1).T)

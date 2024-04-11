@@ -19,15 +19,15 @@ from utils import load_main_tokenizer, check_lora_in_model_path, Instructions, I
 tqdm.pandas()
 
 # define paths for two datasets
-hhrlhf_dataset_path = 'Anthropic/hh-rlhf'
+hhrlhf_dataset_path = '/home/futingchen/MultiContrast/data/HH/test.jsonl'
 summary_dataset_path = 'openai/summarize_from_feedback'
 
 
 @dataclass
 class ScriptArguments:
-    save_directory: Optional[str] = field(default='./logs_trl')
-    base_model_name: Optional[str] = field(default='./huggingface_models/Llama-2-7b-hf')
-    wandb_name: Optional[str] = field(default='evalnew_assistant_pretrained_harmless_helpful', metadata={"help": "Name for this experiment"})
+    save_directory: Optional[str] = field(default='/home/futingchen/MultiContrast/dump/')
+    base_model_name: Optional[str] = field(default='/home/futingchen/PLM/Llama-2-7b-hf')
+    wandb_name: Optional[str] = field(default='', metadata={"help": "Name for this experiment"})
     reward_names:Optional[str] = field(default='harmless,helpful') 
     exp_type: Optional[str] = field(default='assistant', metadata={"help": "exp type, 'summary' or 'assistant' "})
 
@@ -45,12 +45,12 @@ print('process: {}, model gpu id: {}'.format(process_id, gpu_id))
 reward_names = [x.strip() for x in script_args.reward_names.split(',')]
 print(reward_names)
 reward_path_tokenizer_dict = {
-    'harmless': ['Ray2333/gpt2-large-harmless-reward_model'],
-    'helpful': ['Ray2333/gpt2-large-helpful-reward_model'],
+    'harmless': ['/home/futingchen/PLM/gpt2large_harmless_reward'],
+    'helpful': ['/home/futingchen/PLM/gpt2large_helpful_reward'],
     'deberta': ['OpenAssistant/reward-model-deberta-v3-large-v2'],
     'summary': ['Tristan/gpt2_reward_summarization'],
     'faithful':['CogComp/bart-faithful-summary-detector'],
-    'humor': ['mohameddhiab/humor-no-humor'],
+    'humor': ['/home/futingchen/PLM/distilbert_humor_reward'],
 }
 reward_model_path_list = []
 rm_tokenizer_path_list = []
@@ -61,7 +61,7 @@ for name in reward_names:
     rm_tokenizer_path_list.append(reward_path_tokenizer_dict[name][0])
 
 reward_models = RewardModels(reward_model_path_list, rm_tokenizer_path_list, gpu_id) #, reward_stats_path) 
-os.makedirs(os.path.join(script_args.save_directory, script_args.wandb_name), exist_ok=True)
+os.makedirs(script_args.save_directory, exist_ok=True)
 
 
 set_seed(8888)
@@ -92,7 +92,7 @@ print('evaluation........')
 tokenizer.padding_side = "left"
 
 if exp_type == 'assistant':
-    valid_dataset = build_dataset_eval(hhrlhf_dataset_path, tokenizer, reward_models.rm_tokenizers[0], reward_models.rm_tokenizers[1], split='test') 
+    valid_dataset = build_dataset_eval(hhrlhf_dataset_path, tokenizer, reward_models.rm_tokenizers[0], reward_models.rm_tokenizers[1], split='train' if 'json' in hhrlhf_dataset_path else 'test') 
     instructions = Instructions()
 else:
     valid_dataset = build_dataset_summary_eval(summary_dataset_path, tokenizer, reward_models.rm_tokenizers[0], reward_models.rm_tokenizers[1], split='test') 
@@ -105,6 +105,7 @@ for key in ['key', 'text', 'prompt', 'response', 'query']:
     if key in valid_dataset.column_names:
         remove_keys.append(key)
 valid_dataset = valid_dataset.remove_columns(remove_keys)
+# valid_dataset = valid_dataset.select(range(10))
 
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 valid_data_loader = DataLoader(valid_dataset, batch_size=valid_batch_size, drop_last=True, collate_fn=data_collator)
@@ -131,6 +132,15 @@ queries_responses = [
     for text in full_responses
 ]
 
+
+import json
+f = open('/home/futingchen/MultiContrast/dump/Llama-2-7b-hf_impl.json','w')
+for i in range(len(queries_responses)):
+    f.write(json.dumps({"prompt":queries_responses[i][0], "response": queries_responses[i][1]},ensure_ascii=False)+'\n')
+f.close()
+print("generation saved!")
+
+
 if hasattr(instructions, 'get_post'):
     rewards_list = reward_models.get_reward_model_scores(queries_responses, instructions.get_post)
 else:
@@ -154,6 +164,5 @@ if process_id == 0:
         evaluation_result['obtained_score{}'.format(i+1)] = all_rewards[i]
         print('total average obtained score {}: {}'.format(i+1, np.mean(evaluation_result['obtained_score{}'.format(i+1)])))
 
-    dataframe = pd.DataFrame(evaluation_result)
-    dataframe.to_csv(os.path.join(script_args.save_directory, script_args.wandb_name,'eval_data.csv'))
-
+    #dataframe = pd.DataFrame(evaluation_result)
+    #dataframe.to_csv(os.path.join(script_args.save_directory, script_args.wandb_name,'eval_data.csv'))

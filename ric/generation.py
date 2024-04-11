@@ -100,7 +100,7 @@ def generate_data(
     full_prompts = tokenizer.batch_decode(full_prompts)
     full_responses = tokenizer.batch_decode(full_response_tensors)
     full_prompts, full_responses = get_clean_data(full_responses, full_prompts, remove_bad=True)
-    
+
     ## del model and clear gpu 
     del model, data_loader
     clean_gpu_memory()
@@ -113,7 +113,7 @@ def generate_data(
         instructions = Instructions_summary_n(reward_models.num_rewards)
 
     queries_responses = [(instructions.get_input(text),  instructions.get_response(text)) for text in full_responses]
-    
+
     if hasattr(instructions, 'get_post'):
         rewards_list = reward_models.get_reward_model_scores(queries_responses, instructions.get_post)
     else:
@@ -152,5 +152,3 @@ def generate_data(
 
     # wait for the main process
     accelerator.wait_for_everyone()
-
-

@@ -176,7 +176,7 @@ def build_dataset_summary(path, tokenizer, split='train', size=None):
 
 
 def build_dataset_eval(path, tokenizer,rm_tokenizer1,rm_tokenizer2, split='test', size=None):
-    ds = load_dataset(path, split=split)
+    ds = load_dataset('json',data_files=[path], split=split)
     if size is not None:
         ds = ds.select(range(size))
     ds = ds.select(range(0, len(ds), 4))
