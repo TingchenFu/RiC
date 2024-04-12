@@ -131,7 +131,7 @@ if __name__ == '__main__':
     print('>>>>>> model loaded')
 
     sampling_params = SamplingParams(temperature = args.temperature, top_p=args.top_p, max_tokens = args.max_tokens)    
-    raw_dataset = load_dataset('json', data_files=[os.path.join('/home/futingchen/MultiContrast','data/HH/harmless_base_train.jsonl'), os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_base_train.jsonl'),  os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_online_train.jsonl'), os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_sampled_train.jsonl') ]   )
+    raw_dataset = load_dataset('json', data_files=[os.path.join('/home/tingchen_fu/MultiContrast','data/HH/harmless_base_train.jsonl'), os.path.join('/home/tingchen_fu/MultiContrast','data/HH/helpful_base_train.jsonl'),  os.path.join('/home/tingchen_fu/MultiContrast','data/HH/helpful_online_train.jsonl'), os.path.join('/home/tingchen_fu/MultiContrast','data/HH/helpful_sampled_train.jsonl') ]   )
     # ATTENTION
     raw_dataset = raw_dataset['train']
     selected_ind = np.random.choice(len(raw_dataset), 20000, replace=False)
@@ -151,11 +151,11 @@ if __name__ == '__main__':
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path,trust_remote_code=True)
     templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
-    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/futingchen','PLM/gpt2large_harmless_reward'))
+    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/tingchen_fu','PLM/gpt2large_harmless_reward'))
     templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
-    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/futingchen','PLM/gpt2large_helpful_reward'))
+    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/tingchen_fu','PLM/gpt2large_helpful_reward'))
     templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
-    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/futingchen','PLM/distilbert_humor_reward'))
+    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/tingchen_fu','PLM/distilbert_humor_reward'))
     templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
     print(">>>>>> dataset filtered: {}".format(len(templated_dataset)))
     
