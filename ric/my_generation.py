@@ -52,6 +52,29 @@ def sample_goals(size, num_rewards=3, rewards_list=None, maximum=0.9999):
     return np.round(preferences, 1)
 
 
+def map_rewards_from_preference(rewards_list, preference, method='linf'):
+    n = len(rewards_list)
+    target_rewards = np.zeros(n)
+    if method == 'linf':
+        max_id = np.argmax(preference)
+        target_rewards[max_id] = np.round(np.quantile(rewards_list[max_id], 1), 1)
+        for i in range(n):
+            if i != max_id:
+                low, high = np.quantile(rewards_list[i], 0), np.quantile(rewards_list[i], 1)
+                target_rewards[i] = np.round(min(n * preference[i], 1) * (high - low) + low, 1)
+    elif method == 'l2':
+        for i in range(n):
+            low, high = np.quantile(rewards_list[i], 0), np.quantile(rewards_list[i], 1)
+            target_rewards[i] = np.round(preference[i] / np.sqrt((np.power(preference, 2).sum())) * (high - low) + low, 1)
+    elif method == 'linear':
+        for i in range(n):
+            low, high = np.quantile(rewards_list[i], 0), np.quantile(rewards_list[i], 1)
+            target_rewards[i] = np.round(preference[i] * (high - low) + low, 1)
+    else:
+        raise NotImplementedError
+    return target_rewards
+
+
 
 # template='''
 # Below is an instruction that describes a task. Write a response that appropriately completes the request.
@@ -107,6 +130,7 @@ if __name__ == '__main__':
     parser.add_argument('--temperature', type=float, default=0.7)
     parser.add_argument('--top_p', type=float, default=0.9)
     parser.add_argument('--template', type=str, default='vicuna')
+    parser.add_argument("--preference",type=str,default=None)
     args = parser.parse_args()
 
 
@@ -119,6 +143,14 @@ if __name__ == '__main__':
 
     if args.tokenizer_name_or_path is None:
         args.tokenizer_name_or_path = args.model_name_or_path
+    preference_str = ''
+    if ',' in args.preference:
+        preference_str= args.preference.replace(',','')
+        args.preference = args.preference.split(',')
+        args.preference = [float(x) for x in args.preference]
+        args.preference = [x/sum(args.preference) for x in args.preference]
+        rewards_reference_list = [np.random.randn(50000) for _ in range(len(args.preference))]
+        
 
     num_gpus = torch.cuda.device_count()
     #another_args = {'max_num_batched_tokens': args.max_num_batched_tokens} 
@@ -131,15 +163,26 @@ if __name__ == '__main__':
     print('>>>>>> model loaded')
 
     sampling_params = SamplingParams(temperature = args.temperature, top_p=args.top_p, max_tokens = args.max_tokens)    
-    raw_dataset = load_dataset('json', data_files=[os.path.join('/home/tingchen_fu/MultiContrast','data/HH/harmless_base_train.jsonl'), os.path.join('/home/tingchen_fu/MultiContrast','data/HH/helpful_base_train.jsonl'),  os.path.join('/home/tingchen_fu/MultiContrast','data/HH/helpful_online_train.jsonl'), os.path.join('/home/tingchen_fu/MultiContrast','data/HH/helpful_sampled_train.jsonl') ]   )
+    if args.preference is None: # the online generation stage
+        raw_dataset = load_dataset('json', data_files=[os.path.join('/home/futingchen/MultiContrast','data/HH/harmless_base_train.jsonl'), os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_base_train.jsonl'),  os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_online_train.jsonl'), os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_sampled_train.jsonl') ]   )
+    else: # the test stage with specified preference 
+        raw_dataset = load_dataset('json', data_files=[os.path.join('/home/futingchen/MultiContrast','data/HH/test.jsonl')])
     # ATTENTION
     raw_dataset = raw_dataset['train']
-    selected_ind = np.random.choice(len(raw_dataset), 20000, replace=False)
-    raw_dataset = raw_dataset.select(selected_ind)
-    target_reward = sample_goals(len(raw_dataset), num_rewards=3) 
-    raw_dataset = raw_dataset.add_column('helpful_reward', target_reward[:,0])
-    raw_dataset = raw_dataset.add_column('harmless_reward', target_reward[:,1])
-    raw_dataset = raw_dataset.add_column('humor_reward', target_reward[:,2])
+    if args.preference is None:
+        selected_ind = np.random.choice(len(raw_dataset), 20000, replace=False)
+        raw_dataset = raw_dataset.select(selected_ind)
+    if args.preference:
+        target_reward = map_rewards_from_preference(rewards_reference_list, args.preference)
+        target_reward = np.tile(target_reward, (len(raw_dataset), 1))
+        raw_dataset = raw_dataset.add_column('helpful_reward', target_reward[:,0])
+        raw_dataset = raw_dataset.add_column('harmless_reward', target_reward[:,1])
+        raw_dataset = raw_dataset.add_column('humor_reward', target_reward[:,2])
+    else:
+        target_reward = sample_goals(len(raw_dataset), num_rewards=3) 
+        raw_dataset = raw_dataset.add_column('helpful_reward', target_reward[:,0])
+        raw_dataset = raw_dataset.add_column('harmless_reward', target_reward[:,1])
+        raw_dataset = raw_dataset.add_column('humor_reward', target_reward[:,2])
     #raw_dataset = raw_dataset['train'].select(range(0,len(raw_dataset['train']),4))
     templated_dataset = raw_dataset.map(
         template_function_hh,
@@ -176,10 +219,10 @@ if __name__ == '__main__':
 
     if args.peft_model_path:
         args.output_file = os.path.join(os.path.join(root,'dump'),args.peft_model_path.split('/')[-1] + '_'+ args.template)
-        args.output_file += '.jsonl'
+        args.output_file += '{}.jsonl'.format(preference_str)
     else:
         args.output_file = os.path.join(os.path.join(root,'dump'),args.model_name_or_path.split('/')[-1]+ '_'+ args.template)
-        args.output_file += '.jsonl'
+        args.output_file += '{}.jsonl'.format(preference_str)
 
     fout = open(args.output_file,'w')
     for id, output in enumerate(sorted_outputs):
