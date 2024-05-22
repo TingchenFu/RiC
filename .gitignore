@@ -1,3 +1,6 @@
 */data/*
 */dump/*
 *.pyc
+/dump/*
+ric/dump_HH/*
+ric/dump_beaver/*
