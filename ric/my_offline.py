@@ -650,6 +650,18 @@ def main():
         return sample
 
 
+    def template_function_beaver(sample,criteria='better_response_id'):
+        assert criteria in ['better_response_id', 'safer_response_id']
+        chosen_id = int(sample[criteria])
+        sample['completion'] = sample['response_{}'.format(chosen_id)]
+
+        sample['prompt_with_score'] = sample['prompt']+ ' ' 
+        sample['prompt_with_score'] += '<rm1_score>' + ' ' + str(round(sample['helpful_reward'], 1)) + ' '
+        sample['prompt_with_score'] += '<rm2_score>' + ' ' + str(round(sample['harmless_reward'], 1)) + ' '
+
+        return sample 
+
+
 
 
     def completion_preprocess_function(example,  add_bos=False):
@@ -753,7 +765,7 @@ def main():
     with training_args.main_process_first(desc="example per line with padding"):
         if not data_args.streaming:
             templated_datasets = raw_datasets.map(
-                template_function_hh,
+                template_function_hh if 'HH' in data_args.train_file[0] else template_function_beaver,
                 batched=False,
                 num_proc=data_args.preprocessing_num_workers,
                 #load_from_cache_file=not data_args.overwrite_cache,
@@ -761,7 +773,7 @@ def main():
             )
         else:
             templated_datasets = raw_datasets.map(
-                template_function_hh,
+                template_function_hh if 'HH' in data_args.train_file[0] else template_function_beaver,
                 batched=False,
             )
 
