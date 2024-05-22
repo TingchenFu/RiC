@@ -129,8 +129,9 @@ if __name__ == '__main__':
     parser.add_argument('--max_tokens', type=int, default=128) #max token means max new tokens to generate
     parser.add_argument('--temperature', type=float, default=0.7)
     parser.add_argument('--top_p', type=float, default=0.9)
-    parser.add_argument('--template', type=str, default='vicuna')
+    parser.add_argument('--template', type=str, default='empty')
     parser.add_argument("--preference",type=str,default=None)
+    parser.add_argument("--data_file",type=str,default=None, help='the training data for online or test data')
     args = parser.parse_args()
 
 
@@ -150,6 +151,10 @@ if __name__ == '__main__':
         args.preference = [float(x) for x in args.preference]
         args.preference = [x/sum(args.preference) for x in args.preference]
         rewards_reference_list = [np.random.randn(50000) for _ in range(len(args.preference))]
+
+    if args.data_file:
+        args.data_file = args.data_file.split(',')
+        
         
 
     num_gpus = torch.cuda.device_count()
@@ -164,42 +169,49 @@ if __name__ == '__main__':
 
     sampling_params = SamplingParams(temperature = args.temperature, top_p=args.top_p, max_tokens = args.max_tokens)    
     if args.preference is None: # the online generation stage
-        raw_dataset = load_dataset('json', data_files=[os.path.join('/home/futingchen/MultiContrast','data/HH/harmless_base_train.jsonl'), os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_base_train.jsonl'),  os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_online_train.jsonl'), os.path.join('/home/futingchen/MultiContrast','data/HH/helpful_sampled_train.jsonl') ]   )
+        raw_dataset = load_dataset('json', data_files = args.data_file)
     else: # the test stage with specified preference 
-        raw_dataset = load_dataset('json', data_files=[os.path.join('/home/futingchen/MultiContrast','data/HH/test.jsonl')])
+        raw_dataset = load_dataset('json', data_files = args.data_file)
     # ATTENTION
     raw_dataset = raw_dataset['train']
     if args.preference is None:
         selected_ind = np.random.choice(len(raw_dataset), 20000, replace=False)
         raw_dataset = raw_dataset.select(selected_ind)
     if args.preference:
-        target_reward = map_rewards_from_preference(rewards_reference_list, args.preference)
+        target_reward = map_rewards_from_preference(rewards_reference_list, args.preference, method='l2')
         target_reward = np.tile(target_reward, (len(raw_dataset), 1))
+    else:
+        target_reward = sample_goals(len(raw_dataset), num_rewards=3 if 'HH' in args.data_file[0] else 2)
+    
+    if 'HH' in args.data_file[0]:
         raw_dataset = raw_dataset.add_column('helpful_reward', target_reward[:,0])
         raw_dataset = raw_dataset.add_column('harmless_reward', target_reward[:,1])
         raw_dataset = raw_dataset.add_column('humor_reward', target_reward[:,2])
     else:
-        target_reward = sample_goals(len(raw_dataset), num_rewards=3) 
         raw_dataset = raw_dataset.add_column('helpful_reward', target_reward[:,0])
         raw_dataset = raw_dataset.add_column('harmless_reward', target_reward[:,1])
-        raw_dataset = raw_dataset.add_column('humor_reward', target_reward[:,2])
     #raw_dataset = raw_dataset['train'].select(range(0,len(raw_dataset['train']),4))
     templated_dataset = raw_dataset.map(
-        template_function_hh,
+        template_function_hh if 'HH' in args.data_file[0] else template_function_hh,
         batched=False,
-        remove_columns= ['chosen','rejected'],
+        remove_columns= ['chosen','rejected'] if 'HH' in args.data_file[0] else None
     )
 
     # filter out the dataset that is too long or too short
     from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path,trust_remote_code=True)
-    templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
-    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/tingchen_fu','PLM/gpt2large_harmless_reward'))
-    templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
-    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/tingchen_fu','PLM/gpt2large_helpful_reward'))
-    templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
-    tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/tingchen_fu','PLM/distilbert_humor_reward'))
-    templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
+    if 'HH' in args.data_file[0]:
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path,trust_remote_code=True)
+        templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
+        tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/futingchen','PLM/gpt2large_harmless_reward'))
+        templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
+        tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/futingchen','PLM/distilbert_humor_reward'))
+        templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 and len(tokenizer.encode(x['prompt_with_score'])) >= 8)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path,trust_remote_code=True)
+        templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 )
+        tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/futingchen','PLM/gpt2-large'))
+        templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 )
+        
     print(">>>>>> dataset filtered: {}".format(len(templated_dataset)))
     
     #templated_dataset = templated_dataset.select(range(100))
