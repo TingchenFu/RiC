@@ -34,6 +34,8 @@ def template_function_hh(sample,chosen=True):
 
 
 def template_function_beaver(sample,criteria='better_response_id'):
+    if 'prompt' in sample and 'completion' in sample:
+        return sample
     assert criteria in ['better_response_id', 'safer_response_id']
     chosen_id = int(sample[criteria])
     sample['completion'] = sample['response_{}'.format(chosen_id)]    

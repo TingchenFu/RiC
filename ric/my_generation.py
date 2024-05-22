@@ -36,6 +36,18 @@ def template_function_hh(sample,chosen=True):
     return sample
 
 
+def template_function_beaver(sample,criteria='better_response_id'):
+    assert criteria in ['better_response_id', 'safer_response_id']
+    chosen_id = int(sample[criteria])
+    sample['completion'] = sample['response_{}'.format(chosen_id)]
+
+    sample['prompt_with_score'] = sample['prompt']+ ' ' 
+    sample['prompt_with_score'] += '<rm1_score>' + ' ' + str(round(sample['helpful_reward'], 1)) + ' '
+    sample['prompt_with_score'] += '<rm2_score>' + ' ' + str(round(sample['harmless_reward'], 1)) + ' '
+
+    return sample 
+
+
 def sample_goals(size, num_rewards=3, rewards_list=None, maximum=0.9999):
     if rewards_list is None:
         samples = np.random.normal(0, 1, 100000)
@@ -145,15 +157,15 @@ if __name__ == '__main__':
     if args.tokenizer_name_or_path is None:
         args.tokenizer_name_or_path = args.model_name_or_path
     preference_str = ''
-    if ',' in args.preference:
+    if args.preference and  ',' in args.preference:
         preference_str= args.preference.replace(',','')
         args.preference = args.preference.split(',')
         args.preference = [float(x) for x in args.preference]
         args.preference = [x/sum(args.preference) for x in args.preference]
         rewards_reference_list = [np.random.randn(50000) for _ in range(len(args.preference))]
 
-    if args.data_file:
-        args.data_file = args.data_file.split(',')
+
+    args.data_file = args.data_file.split(',')
         
         
 
@@ -192,7 +204,7 @@ if __name__ == '__main__':
         raw_dataset = raw_dataset.add_column('harmless_reward', target_reward[:,1])
     #raw_dataset = raw_dataset['train'].select(range(0,len(raw_dataset['train']),4))
     templated_dataset = raw_dataset.map(
-        template_function_hh if 'HH' in args.data_file[0] else template_function_hh,
+        template_function_hh if 'HH' in args.data_file[0] else template_function_beaver,
         batched=False,
         remove_columns= ['chosen','rejected'] if 'HH' in args.data_file[0] else None
     )
@@ -209,7 +221,7 @@ if __name__ == '__main__':
     else:
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path,trust_remote_code=True)
         templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 )
-        tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/futingchen','PLM/gpt2-large'))
+        tokenizer = AutoTokenizer.from_pretrained(os.path.join('/home/tingchen_fu','PLM/gpt2-large'))
         templated_dataset = templated_dataset.filter(lambda x: len(tokenizer.encode(x['prompt_with_score'])) <= 512 )
         
     print(">>>>>> dataset filtered: {}".format(len(templated_dataset)))
