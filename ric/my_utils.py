@@ -198,4 +198,57 @@ def get_online2_train_HH():
 
 
 
-get_online1_train_beaver()
+
+
+def get_online2_train_beaver():
+    offline_dataset = load_dataset('json', data_files=[os.path.join(home, 'RiC/ric/data/beaver/offline_train.jsonl')],split='train')
+
+
+    thresholds = [np.quantile(offline_dataset['helpful_reward'], 0.7),
+                np.quantile(offline_dataset['harmless_reward'], 0.7),
+                ]
+    offline_dataset = offline_dataset.filter(lambda x: int(x['helpful_reward'] >= thresholds[0]) + int(x['harmless_reward'] >= thresholds[1]) >= 1)
+
+
+    offline_dataset = offline_dataset.map(template_function_beaver, batched=False, remove_columns=None)
+    offline_dataset = offline_dataset.select(range(10000))
+
+
+    online1_dataset = load_dataset('json', data_files=[os.path.join(home, 'RiC/ric/data/beaver/online1_train.jsonl')],split='train')
+
+
+    thresholds = [np.quantile(online1_dataset['helpful_reward'], 0.7),
+                np.quantile(online1_dataset['harmless_reward'], 0.7),
+                ]
+    online1_dataset = online1_dataset.filter(lambda x: int(x['helpful_reward'] >= thresholds[0]) + int(x['harmless_reward'] >= thresholds[1]) >=1 )
+
+
+    online2_dataset = load_dataset('json', data_files=[os.path.join(home, 'RiC/ric/dump_beaver/online1_phi-2_beaver_lora_bf16_bs4lr1e-5decay0.01constant_05222124_empty.jsonl')],split='train')
+    online2_helpful_reward = json.load(open( os.path.join(home, 'RiC/ric/data/beaver/online2_reward_helpful.json')))
+    online2_harmless_reward = json.load(open( os.path.join(home, 'RiC/ric/data/beaver/online2_reward_harmless.json')))
+
+    online2_dataset = online2_dataset.add_column('helpful_reward', online2_helpful_reward)
+    online2_dataset = online2_dataset.add_column('harmless_reward', online2_harmless_reward)
+
+
+    thresholds = [np.quantile(online2_dataset['helpful_reward'], 0.7),
+                np.quantile(online2_dataset['harmless_reward'], 0.7),
+                ]
+    online2_dataset = online2_dataset.filter(lambda x: int(x['helpful_reward'] >= thresholds[0]) + int(x['harmless_reward'] >= thresholds[1]) >=1)
+
+    print(len(offline_dataset))
+    print(len(online1_dataset))
+    print(len(online2_dataset))
+
+    print(offline_dataset.column_names)
+    print(online1_dataset.column_names)
+    print(online2_dataset.column_names)
+
+    concatenate_datasets([offline_dataset,online1_dataset, online2_dataset]).to_json( os.path.join(home,'RiC/ric/data/beaver/online2_train.jsonl'), orient='records')
+
+
+
+
+
+
+get_online2_train_beaver()
